@@ -3,7 +3,6 @@ from datetime import datetime
 from datetime import date
 # Operators; we need this to operate!
 from airflow.operators.python_operator import PythonOperator
-from cleaning import clean_wh, clean_life_exp, clean_250_cnt, merge_data
 import pandas as pd
 import re
 import os
@@ -99,7 +98,7 @@ def clean_life_exp(df: pd.DataFrame)->pd.DataFrame:
   df_renamed = df_renamed.join(df_population).reset_index()
   # Impute missing values
   df_renamed = df_renamed.fillna((df_renamed.median(axis=0)), inplace=True)
-  return df_renamed
+  return df_renamed.groupby(['year']).mean()
 
 
 def clean_250_cnt(df: pd.DataFrame)->pd.DataFrame:
