@@ -17,9 +17,9 @@ default_args = {
 
 # step 3 - instantiate DAG
 dag = DAG(
-  'covid-DAG',
+  'world-happiness-DAG',
   default_args=default_args,
-  description='Fetch covid data from API',
+  description='World Hapiness DAG',
   schedule_interval='@once',
 )
 
