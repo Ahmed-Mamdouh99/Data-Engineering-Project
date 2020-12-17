@@ -6,7 +6,7 @@ from airflow.operators.python_operator import PythonOperator
 import pandas as pd
 import re
 import os
-
+import requests
 
 
 def clean_wh(data2015,data2016,data2017,data2018,data2019)->pd.DataFrame:
@@ -69,39 +69,38 @@ def clean_life_exp(df: pd.DataFrame)->pd.DataFrame:
     df_population['year'] = df_population['year'].str.extract(r'(\d+)').astype('int')
     df_population = df_population[(df_population['year'] >= 2000) & (df_population['year'] <= 2015)]
     updated_values = {
-    "Saint Lucia": "LCA","Slovakia": "SVK",
-    "Iran (Islamic Republic of)": "IRN",
-    "Gambia": "GMB","Micronesia (Federated States of)": "FSM",
-    "United States of America": "USA","Bahamas": "BHS",
-    "Lao People's Democratic Republic": "LAO","Republic of Moldova": "MDA",
-    "Cook Islands": "COK","Saint Vincent and the Grenadines": "VCT","Yemen": "YEM",
-    "United Kingdom of Great Britain and Northern Ireland": "GBR","Côte d'Ivoire": "CIV",
-    "Niue": "NIU","United Republic of Tanzania": "TZA","Saint Kitts and Nevis": "KNA",
-    "Bolivia (Plurinational State of)": "BOL","Congo": "COG",
-    "Venezuela (Bolivarian Republic of)": "VEN","Republic of Korea": "KOR",
-    "Democratic People's Republic of Korea": "PRK","Egypt": "EGY","Viet Nam": "VNM",
-    "Kyrgyzstan": "KGZ","Czechia": "CZE","Democratic Republic of the Congo": "COD",
-    "The former Yugoslav republic of Macedonia": "MKD"
-  }
-  for name, code in updated_values.items():
-    mask = df_population['country_code'] == code
-    df_population.loc[mask, 'country'] = name
-    # Write dataset to file
+      "Saint Lucia": "LCA","Slovakia": "SVK",
+      "Iran (Islamic Republic of)": "IRN",
+      "Gambia": "GMB","Micronesia (Federated States of)": "FSM",
+      "United States of America": "USA","Bahamas": "BHS",
+      "Lao People's Democratic Republic": "LAO","Republic of Moldova": "MDA",
+      "Cook Islands": "COK","Saint Vincent and the Grenadines": "VCT","Yemen": "YEM",
+      "United Kingdom of Great Britain and Northern Ireland": "GBR","Côte d'Ivoire": "CIV",
+      "Niue": "NIU","United Republic of Tanzania": "TZA","Saint Kitts and Nevis": "KNA",
+      "Bolivia (Plurinational State of)": "BOL","Congo": "COG",
+      "Venezuela (Bolivarian Republic of)": "VEN","Republic of Korea": "KOR",
+      "Democratic People's Republic of Korea": "PRK","Egypt": "EGY","Viet Nam": "VNM",
+      "Kyrgyzstan": "KGZ","Czechia": "CZE","Democratic Republic of the Congo": "COD",
+      "The former Yugoslav republic of Macedonia": "MKD"
+    }
+    for name, code in updated_values.items():
+      mask = df_population['country_code'] == code
+      df_population.loc[mask, 'country'] = name
+    df_population.reset_index(inplace=True, drop=True)
+      # Write dataset to file
     df_population.to_csv(pop_filename)
   else:
     # Load population dataset
-    df_population = pd.read_csv(pop_filename)
+    df_population = pd.read_csv(pop_filename, index_col=0)
   # Merge datasets
   df_renamed.drop('population', axis=1, inplace=True)
-  df_renamed.set_index(['country', 'year'], inplace=True)
-  df_population.set_index(['country', 'year'], inplace=True)
-  df_renamed = df_renamed.join(df_population).reset_index()
+  df_renamed = df_renamed.merge(df_population, on=['year', 'country'])
   # Impute missing values
-  df_renamed = df_renamed.fillna((df_renamed.median(axis=0)), inplace=True)
-  return df_renamed.groupby(['year']).mean()
+  df_renamed.fillna((df_renamed.median(axis=0)), inplace=True)
+  df_New = df_renamed.groupby(['country', 'country_code']).mean().reset_index()
+  return df_New
 
-
-def clean_250_cnt(df: pd.DataFrame)->pd.DataFrame:
+def clean_250_cnt(countryData: pd.DataFrame)->pd.DataFrame:
   countryData['Real Growth Rating(%)'] = countryData['Real Growth Rating(%)'].str.extract('(\S+)%')[0].str.replace('–', '-').astype(float)
   countryData['Literacy Rate(%)'] = countryData['Literacy Rate(%)'].str.extract('(\S+)%')[0].str.replace('–', '-').astype(float)
   countryData['Inflation(%)'] = countryData['Inflation(%)'].str.extract('(\S+)%')[0].str.replace('–', '-').astype(float)
@@ -130,8 +129,8 @@ def clean_250_cnt(df: pd.DataFrame)->pd.DataFrame:
 def merge_data(df_wrld_happi: pd.DataFrame, df_life_exp: pd.DataFrame, df_250_cnt: pd.DataFrame)->pd.DataFrame: # TODO: Implement this
 	worldHappines = df_wrld_happi[df_wrld_happi['Year']==2015].copy()
 	worldHappines.drop('Year',axis=1,inplace=True)
-
 	df_life_exp.rename(columns = {"country":"Country", "year":"Year"}, inplace=True)
+
 	df_250_cnt.rename(columns = {"name":"Country"}, inplace=True)
 
 	before = ['Somaliland region', 'Bolivia (Plurinational State of)','Congo (Brazzaville)','Congo (Kinshasa)','Iran (Islamic Republic of)', "Lao People's Democratic Republic", "Democratic People's Republic of Korea", 'Republic of Moldova', 'Russian Federation', 'Somaliland Region', 'Syrian Arab Republic', 'United Kingdom of Great Britain and Northern Ireland', 'United States of America', 'Venezuela (Bolivarian Republic of)', 'Viet Nam', 'Czechia']
@@ -156,7 +155,7 @@ def merge_data(df_wrld_happi: pd.DataFrame, df_life_exp: pd.DataFrame, df_250_cn
 default_args = {
   'owner': 'airflow',
   'depends_on_past': False,
-  'start_date': datetime.now()
+  'start_date': datetime(2020, 12, 13)
   }
 
 
@@ -177,8 +176,8 @@ def store_data(**context):
 def translate_data(**context):
   [df_wrld_happi, df_250_cnt, df_life_exp] = context['task_instance'].xcom_pull(task_ids='extract_data')
   df_wrld_happi_cleaned = clean_wh(*df_wrld_happi)
-  df_life_exp_cleaned = clean_life_exp(df_life_exp)
   df_250_cnt_cleaned = clean_250_cnt(df_250_cnt)
+  df_life_exp_cleaned = clean_life_exp(df_life_exp)
   df_merged = merge_data(df_wrld_happi_cleaned, df_life_exp_cleaned, df_250_cnt_cleaned)
   return df_merged
 
@@ -200,9 +199,9 @@ t1 = PythonOperator(
 )
 
 t2 = PythonOperator(
-  task_id='clean_data',
+  task_id='translate_data',
   provide_context=True,
-  python_callable=clean_data,
+  python_callable=translate_data,
   dag=dag,
 )
 
