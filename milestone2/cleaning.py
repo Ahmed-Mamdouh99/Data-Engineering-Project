@@ -69,7 +69,7 @@ def clean_250_cnt(df: pd.DataFrame)->pd.DataFrame:
   return countryData
 
 def merge_data(df_wrld_happi: pd.DataFrame, df_life_exp: pd.DataFrame, df_250_cnt: pd.DataFrame)->pd.DataFrame: # TODO: Implement this
-  worldHappines = df_wrld_happi[df_wrld_happi['Year']==2015].copy()
+	worldHappines = df_wrld_happi[df_wrld_happi['Year']==2015].copy()
 	worldHappines.drop('Year',axis=1,inplace=True)
 
 	df_life_exp.rename(columns = {"country":"Country", "year":"Year"}, inplace=True)
